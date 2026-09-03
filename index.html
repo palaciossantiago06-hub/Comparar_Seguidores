@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>No Me Siguen</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 20px; background: #0b0b0e; color: #fff; }
+    h1 { font-size: 1.4rem; text-align: center; margin-bottom: 20px; }
+    .box { background: #1c1c24; padding: 15px; border-radius: 12px; margin-bottom: 15px; }
+    label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 0.9rem; }
+    input[type="file"] { width: 100%; font-size: 0.85rem; color: #aaa; }
+    button { width: 100%; padding: 12px; background: #007aff; border: none; border-radius: 10px; color: white; font-weight: bold; font-size: 1rem; cursor: pointer; margin-top: 5px; }
+    #resultado { margin-top: 25px; }
+    ul { list-style: none; padding: 0; margin-top: 15px; }
+    li { background: #1c1c24; padding: 12px 16px; border-radius: 10px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+    span { font-weight: 500; }
+    a { color: #3897f0; text-decoration: none; font-weight: 600; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+
+  <h1>Comparador de Seguidores</h1>
+
+  <div class="box">
+    <label>1. Archivo de Seguidores (followers_1.json):</label>
+    <input type="file" id="fileFollowers" accept=".json">
+  </div>
+
+  <div class="box">
+    <label>2. Archivo de Seguidos (following.json):</label>
+    <input type="file" id="fileFollowing" accept=".json">
+  </div>
+
+  <button onclick="comparar()">Analizar</button>
+
+  <div id="resultado"></div>
+
+  <script>
+    function extraerUsuario(item) {
+      if (!item) return null;
+      // Caso 1: string_list_data anidado (formato clásico)
+      if (item.string_list_data && item.string_list_data.length > 0 && item.string_list_data[0].value) {
+        return item.string_list_data[0].value.trim();
+      }
+      // Caso 2: title (formato nuevo de Meta)
+      if (item.title && item.title.trim() !== '') {
+        return item.title.trim();
+      }
+      // Caso 3: value directo
+      if (item.value && typeof item.value === 'string') {
+        return item.value.trim();
+      }
+      // Caso 4: el item es directamente un string con el nombre
+      if (typeof item === 'string') {
+        return item.trim();
+      }
+      return null;
+    }
+
+    async function leerJSON(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => {
+          try {
+            resolve(JSON.parse(e.target.result));
+          } catch (err) {
+            reject(err);
+          }
+        };
+        reader.onerror = reject;
+        reader.readAsText(file);
+      });
+    }
+
+    async function comparar() {
+      const f1 = document.getElementById('fileFollowers').files[0];
+      const f2 = document.getElementById('fileFollowing').files[0];
+      const resDiv = document.getElementById('resultado');
+
+      if (!f1 || !f2) {
+        alert('Por favor selecciona ambos archivos JSON.');
+        return;
+      }
+
+      try {
+        const rawFollowers = await leerJSON(f1);
+        const rawFollowing = await leerJSON(f2);
+
+        // Obtener la lista cruda de seguidores
+        let followersArray = [];
+        if (Array.isArray(rawFollowers)) {
+          followersArray = rawFollowers;
+        } else if (rawFollowers.relationships_followers) {
+          followersArray = rawFollowers.relationships_followers;
+        } else {
+          // Si viene envuelto en otra propiedad
+          const firstKey = Object.keys(rawFollowers)[0];
+          if (Array.isArray(rawFollowers[firstKey])) {
+            followersArray = rawFollowers[firstKey];
+          }
+        }
+
+        const followersSet = new Set();
+        followersArray.forEach(item => {
+          const user = extraerUsuario(item);
+          if (user) followersSet.add(user.toLowerCase());
+        });
+
+        // Obtener la lista cruda de seguidos
+        let followingArray = [];
+        if (Array.isArray(rawFollowing)) {
+          followingArray = rawFollowing;
+        } else if (rawFollowing.relationships_following) {
+          followingArray = rawFollowing.relationships_following;
+        } else {
+          const firstKey = Object.keys(rawFollowing)[0];
+          if (Array.isArray(rawFollowing[firstKey])) {
+            followingArray = rawFollowing[firstKey];
+          }
+        }
+
+        const noMeSiguen = [];
+        followingArray.forEach(item => {
+          const user = extraerUsuario(item);
+          if (user && !followersSet.has(user.toLowerCase())) {
+            noMeSiguen.push(user);
+          }
+        });
+
+        resDiv.innerHTML = `<h3>Total que no te siguen: ${noMeSiguen.length}</h3>`;
+        const ul = document.createElement('ul');
+        noMeSiguen.forEach(user => {
+          const li = document.createElement('li');
+          li.innerHTML = `<span>${user}</span> <a href="https://instagram.com/${user}" target="_blank">Ver perfil</a>`;
+          ul.appendChild(li);
+        });
+        resDiv.appendChild(ul);
+
+      } catch (err) {
+        alert('Hubo un error al procesar los archivos JSON.');
+        console.error(err);
+      }
+    }
+  </script>
+</body>
+</html>
